@@ -26,12 +26,12 @@ Solo hace cálculo. **No habla HTTP ni WebSocket y no accede a la base de datos.
 |------|----------|
 | **Física** | Bucle a paso fijo (60 Hz por defecto) con un **modelo cinemático de tracción diferencial** sin deslizamiento, suficiente para los robots de prácticas (20 cm/s). Colisiones entre robots con un círculo de radio `radio_colision`. |
 | **Motores** | Aplica cada consigna en el siguiente paso de física. La velocidad real de cada rueda se acerca a la pedida respetando `aceleracion_max` y `deceleracion_max` (inercia). Con los motores desactivados, la rueda frena con `deceleracion_reposo`. |
-| **Sensores** | Muestrea cada sensor a su frecuencia (10 Hz los infrarrojos), comprobando si su punto de medida cae sobre la línea del circuito (25 mm de ancho). Cada muestra lleva una marca de tiempo en milisegundos. |
-| **Circuito** | Carga la geometría del circuito (óvalo, ocho…) que le indica `CIRCUITO`. |
+| **Sensores** | Muestrea cada sensor a su frecuencia (10 Hz los infrarrojos), comprobando si su punto de medida cae sobre la línea del circuito (25 mm de ancho). De momento son **digitales** (`0` o `1`); más adelante habrá un sensor que promedia varias lecturas. Cada muestra lleva una marca de tiempo en milisegundos. |
+| **Circuito** | Usa el circuito (óvalo, ocho…) que le indica `CIRCUITO`, cuya definición recibe de la pasarela. |
 | **Ciclo de vida** | Entrada de robots en un punto libre y aleatorio, orientados hacia el centro, respetando una distancia de seguridad. Desconecta los motores sin instrucciones (5 s en polling, o al cerrarse el WebSocket) y saca el robot del mundo tras 5 minutos sin actividad o por salida voluntaria. |
 | **Límite de robots** | Rechaza las entradas cuando ya hay `MAX_ROBOTS` robots (4 por defecto). |
 | **Publicación** | Sensores de cada robot, estado completo del mundo para la vista de administrador (30 Hz), eventos de entrada y salida, y un latido cada `LATIDO_S` segundos. |
-| **Configuración** | Al arrancar pide a la pasarela las definiciones de sus robots permitidos, así que no necesita una copia del directorio `robots/`. |
+| **Configuración** | Al arrancar pide a la pasarela las definiciones de sus robots permitidos y de su circuito, así que no necesita una copia de los directorios `robots/` y `circuitos/`. |
 
 ## Qué no hace
 
@@ -62,6 +62,7 @@ No expone puertos: solo se conecta al bus.
 - [Arquitectura del servidor](https://github.com/ojgarciab/carrera-robots-autonomos#arquitectura-del-servidor) y [mensajes entre componentes](https://github.com/ojgarciab/carrera-robots-autonomos#mensajes-entre-componentes)
 - [Modelos de robot](https://github.com/ojgarciab/carrera-robots-autonomos#modelos-de-robot) y [formato de los YAML](https://github.com/ojgarciab/carrera-robots-autonomos/blob/main/robots/README.md)
 - [Ciclo de vida del robot en el mundo](https://github.com/ojgarciab/carrera-robots-autonomos#ciclo-de-vida-del-robot-en-el-mundo)
+- [Contrato de los mensajes del bus](https://github.com/ojgarciab/carrera-robots-autonomos/blob/main/contratos/bus.md) y [formato de los circuitos](https://github.com/ojgarciab/carrera-robots-autonomos/blob/main/circuitos/README.md)
 - [Plan de implementación](Plan.md)
 
 ## Licencia
