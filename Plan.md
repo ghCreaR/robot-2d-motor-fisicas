@@ -9,7 +9,7 @@ Los mensajes del bus están definidos en [`contratos/bus.md`](https://github.com
 | Tema | Propuesta | Motivo |
 |------|-----------|--------|
 | Lenguaje | **Python 3.12** con `asyncio` | Coherente con el resto de componentes. Con 4 robots a 60 Hz el cálculo es pequeño: unas pocas operaciones por robot y paso. |
-| Física | **Modelo cinemático propio** de tracción diferencial | El README común lo considera suficiente para robots de 20 cm/s y evita la complejidad de un motor de físicas general. El diseño deja sitio para cambiarlo más adelante por un modelo dinámico (Box2D, Rapier…) para robots veloces. |
+| Física | **pymunk** (Chipmunk2D) para los cuerpos y los contactos, con un **modelo de rueda propio** | Los robots se empujan y chocan con paredes que los hacen rebotar, arrastrarse o girar, y eso pide un motor de cuerpos rígidos. pymunk es estable, determinista en una misma plataforma, tiene ruedas binarias para Linux y es fácil de usar desde Python. La tracción de cada rueda no la da pymunk, así que se modela aparte (sección 3.1). |
 | Geometría | Funciones propias en Python (distancia de un punto a un segmento o a un arco) | Pocas operaciones, sin dependencias pesadas. NumPy solo si las pruebas de rendimiento lo piden. |
 | Bus | **nats-py**, con transporte abstracto | Igual que la pasarela, para poder probar con un transporte en memoria. |
 | Formato | **MessagePack** | Contrato común con la pasarela. |
@@ -28,10 +28,11 @@ robot-2d-motor-fisicas/
 │   ├── bucle.py           # bucle a paso fijo y planificación de tareas periódicas
 │   ├── mundo.py           # estado del mundo: robots, circuito, temporizadores
 │   ├── robot.py           # pose, velocidades de rueda, consignas, estado de los motores
-│   ├── cinematica.py      # integración del modelo diferencial
+│   ├── fisica.py          # espacio de pymunk: cuerpos, paredes y subpasos
+│   ├── ruedas.py          # modelo de motor y de rueda: tracción, adherencia, patinaje
 │   ├── sensores.py        # muestreo de sensores (infrarrojo)
 │   ├── circuito.py        # geometría del circuito y distancia a la línea
-│   ├── colisiones.py      # colisiones entre robots y con los bordes
+│   ├── materiales.py      # rozamiento y restitución de robots y paredes
 │   ├── aparicion.py       # punto libre aleatorio y orientación hacia el centro
 │   ├── ciclo_vida.py      # entrar, salir, expulsar, parada de motores, salida por inactividad
 │   ├── modelos.py         # carga y validación de las definiciones de robot
@@ -43,22 +44,42 @@ robot-2d-motor-fisicas/
 
 ## 3. Modelo físico
 
-### 3.1. Cinemática diferencial
+### 3.1. Modelo dinámico
 
-Para cada robot, en cada paso `dt = 1 / PASO_FISICA_HZ`:
+Los robots se **empujan entre sí** y **rebotan o se arrastran por las paredes**, así que hace falta un modelo con masas, fuerzas y contactos. Se usa **pymunk** (Chipmunk2D) para el cuerpo rígido de cada robot y los contactos, y un **modelo de rueda propio** encima.
 
-1. **Velocidad de cada rueda.** Se acerca a la objetivo (`consigna × velocidad_max`) como mucho `aceleracion_max × dt` si debe acelerar, o `deceleracion_max × dt` si debe frenar. Con los motores desactivados, el objetivo es 0 y el límite es `deceleracion_reposo`.
-2. **Velocidad del robot.** Con `vi` y `vd` las velocidades de las ruedas izquierda y derecha y `b` la distancia entre ellas (0,11 m en los robots de prácticas, a partir de sus `posicion`):
-   - `v = (vi + vd) / 2`
-   - `ω = (vd − vi) / b`
-3. **Integración exacta en arco.** El robot gira alrededor del punto medio del eje de las ruedas, que no coincide con el centro de gravedad (está a `x = 0,020 m`). Se integra la pose de ese punto: si `|ω|` es casi 0, en línea recta; si no, con la fórmula del arco de circunferencia. Después se calcula la pose del centro de gravedad, que es la que se publica.
+**Cuerpo de cada robot**
 
-Ángulos en radianes y antihorarios, igual que en el formato de los robots; `θ = 0` apunta a `+x` del mundo.
+- Un `pymunk.Body` dinámico con la `masa` del YAML y su `momento_inercia` (o `masa × radio_colision² / 2` si no se indica).
+- Una forma circular de radio `radio_colision`, con `friction = rozamiento` y `elasticity = restitucion`. Pymunk combina los coeficientes de los dos cuerpos en contacto multiplicándolos; se documentará así para quien ajuste los valores.
+- El rozamiento con el suelo lo aportan solo las ruedas (abajo). La rueda de bola apenas frena y no se resiste a deslizar de lado.
 
-### 3.2. Colisiones
+**Paredes**
 
-- **Entre robots:** círculos de radio `radio_colision`. Si un paso deja dos robots solapados, se deshace el avance de ese paso en la dirección del choque y su velocidad en esa dirección pasa a 0. Es simple y estable para robots lentos.
-- **Bordes del mapa:** el mismo tratamiento con los límites del circuito, para que ningún robot salga del mapa.
+- Cuatro segmentos estáticos en los bordes del mapa (`dimensiones`), con el `rozamiento` y la `restitucion` de `paredes` del circuito.
+- El rebote, el arrastre a lo largo de la pared y el giro por el roce salen solos de la resolución de contactos de pymunk: el rozamiento en el punto de contacto, que está separado del centro de gravedad, produce un par que hace girar al robot.
+
+**Modelo de cada rueda motriz**, aplicado en cada subpaso antes de `space.step()`:
+
+1. **Velocidad del motor.** Se acerca a la objetivo (`consigna × velocidad_max`) como mucho `aceleracion_max × dt` si debe acelerar, o `deceleracion_max × dt` si debe frenar. Es el estado interno del motor, con su inercia.
+2. **Carga sobre la rueda.** Se reparte el peso (`masa × 9,81`) entre las ruedas y los `apoyos` con el equilibrio estático según sus posiciones en `x`. En los robots de prácticas, con las ruedas en `x = 0,020` y la bola en `x = −0,050`, cada rueda soporta el 35,7 % del peso.
+3. **Fuerza máxima** de la rueda: `adherencia × carga`.
+4. **Impulso longitudinal.** Se calcula la velocidad del suelo bajo la rueda en la dirección de avance (`v + ω × r`) y el impulso necesario para igualarla a la del motor, con la masa efectiva del cuerpo en ese punto y esa dirección: `1 / (1/m + (r × n)² / I)`. Se limita a la fuerza máxima por `dt`. Si se alcanza el límite, la rueda **patina**.
+5. **Impulso lateral.** Igual, pero para anular la velocidad lateral de la rueda, que es lo que impide que el robot se deslice de lado. También está limitado: si otro robot empuja de lado con más fuerza, el robot se desliza.
+6. **Motores desactivados.** La rueda gira libre: el impulso longitudinal se limita a lo que da `deceleracion_reposo`, de modo que el robot va frenando suave. El lateral se mantiene, porque la rueda sigue apoyada.
+
+Mientras no hay choques, los impulsos nunca llegan al límite (para acelerar a 0,5 m/s² un robot de 0,25 kg hacen falta 0,125 N, y cada rueda admite unos 0,70 N), así que el movimiento coincide con el de un modelo cinemático de tracción diferencial. Esta coincidencia es una de las pruebas de la fase 1.
+
+**Pasos internos.** Cada paso de física (60 Hz) se divide en 4 subpasos (240 Hz) para que los contactos sean estables y los choques no atraviesen a ningún robot. Con 4 robots sigue siendo un cálculo pequeño.
+
+Ángulos en radianes y antihorarios, igual que en el formato de los robots; `θ = 0` apunta a `+x` del mundo. La pose que se publica es la del centro de gravedad.
+
+### 3.2. Choques entre robots y con las paredes
+
+- **Entre robots:** los resuelve pymunk como choques entre cuerpos con masa. Como los robots de prácticas tienen la **misma masa**, ninguno tiene ventaja: si dos robots chocan de frente con la misma velocidad, se frenan; si uno está parado, el otro lo empuja y las ruedas del parado patinan según su adherencia.
+- **Con las paredes:** un robot que llega de frente rebota según la restitución; si llega con un ángulo pequeño, se arrastra a lo largo de la pared y gira por el rozamiento.
+- **Sensores durante un choque:** siguen funcionando igual; el robot sigue viendo la línea si pasa por encima mientras lo empujan.
+- **Entrada al mundo:** la distancia de seguridad evita que un robot aparezca encima de otro o pegado a una pared.
 
 ### 3.3. Sensores infrarrojos
 
@@ -107,9 +128,15 @@ Las consignas que llegan entre dos pasos se guardan y **solo cuenta la última**
 - `Dockerfile` (`python:3.12-slim`), sin puertos expuestos y con un usuario sin privilegios.
 
 ### Fase 1 · Núcleo físico (sin bus)
-- `cinematica.py` con integración exacta.
-- `robot.py` con los límites de aceleración, frenada y reposo.
-- Pruebas: línea recta, giro sobre sí mismo, círculo de radio conocido, tiempo de aceleración de 0 a 0,20 m/s (0,4 s con 0,5 m/s²), frenada activa frente a frenada en reposo.
+- `fisica.py`, `ruedas.py`, `materiales.py` y `robot.py`.
+- Pruebas de movimiento libre, comparadas con el modelo cinemático de tracción diferencial: línea recta, giro sobre sí mismo, círculo de radio conocido, tiempo de aceleración de 0 a 0,20 m/s (0,4 s con 0,5 m/s²), frenada activa frente a frenada en reposo.
+- Pruebas de choques:
+  - Dos robots iguales chocan de frente a la misma velocidad: se frenan y ninguno avanza.
+  - Un robot empuja a otro parado: lo desplaza y las ruedas del parado patinan.
+  - Choque perpendicular contra una pared: rebota según la restitución.
+  - Choque rasante contra una pared: se arrastra y gira.
+  - Ningún robot atraviesa a otro ni sale del mapa, ni siquiera a la velocidad máxima.
+- Prueba de determinismo: la misma secuencia de consignas da la misma trayectoria.
 
 ### Fase 2 · Circuito y sensores
 - `circuito.py` con rectas y arcos. Las pruebas cargan `ovalo.yaml` y `ocho.yaml` del repositorio común.
@@ -117,7 +144,7 @@ Las consignas que llegan entre dos pasos se guardan y **solo cuenta la última**
 - Pruebas: un robot parado sobre la línea ve `1` en el sensor central; los sensores contiguos no dejan pasar la línea entre ellos (separación < ancho); a 20 cm/s, cruzar la línea de frente siempre da al menos una lectura `1`.
 
 ### Fase 3 · Mundo y ciclo de vida
-- `mundo.py`, `aparicion.py`, `colisiones.py` y `ciclo_vida.py`, con un reloj simulado.
+- `mundo.py`, `aparicion.py` y `ciclo_vida.py`, con un reloj simulado.
 - Pruebas de cada fila de la tabla de la sección 4, incluidos los reintentos idempotentes, `expulsar`, `listar` y el límite de robots.
 
 ### Fase 4 · Bus
@@ -137,7 +164,7 @@ Las consignas que llegan entre dos pasos se guardan y **solo cuenta la última**
 
 ### Fase 7 · Mejoras posteriores
 - **Sensor `infrarrojo_promedio`**: el siguiente paso previsto (sección 3.3).
-- Modelo dinámico con rozamiento y derrape para robots veloces.
+- Robots veloces: más subpasos o una frecuencia de física mayor, y revisar el modelo de rueda si derrapan en las curvas.
 - Ruido configurable en los sensores, para acercarse más a un robot real.
 - Más tipos de sensor (distancia, encoders) a medida que aparezcan nuevos modelos de robot.
 
@@ -145,7 +172,7 @@ Las consignas que llegan entre dos pasos se guardan y **solo cuenta la última**
 
 | Depende de | Qué necesita |
 |------------|--------------|
-| Repositorio común | Formato de robots, formato de circuitos (`ovalo` y `ocho` ya definidos) y contrato de mensajes (`contratos/bus.md`). |
+| Repositorio común | Formato de robots (con masa, rozamiento, restitución y adherencia), formato de circuitos (con las paredes; `ovalo` y `ocho` ya definidos) y contrato de mensajes (`contratos/bus.md`). |
 | `robot-2d-pasarela` | *Auth callout* y respuesta a `configuracion`. Hasta entonces se prueba con el transporte en memoria. |
 
 ## 8. Decisiones tomadas
@@ -153,8 +180,10 @@ Las consignas que llegan entre dos pasos se guardan y **solo cuenta la última**
 - **Sensores IR:** digitales (`0`/`1`) en la primera versión. El sensor `infrarrojo_promedio` llega en una fase posterior.
 - **Circuitos:** YAML en el repositorio común; el motor los recibe de la pasarela.
 - **Mensajes:** los de `contratos/bus.md`, con buzón `mundo.<uuid>.buzon` y la operación `expulsar`.
+- **Choques entre robots:** se empujan. Cada robot tiene su masa; los de prácticas, la misma (0,25 kg).
+- **Bordes del mapa:** son paredes. El robot rebota, se arrastra o gira según el ángulo, la velocidad y el rozamiento.
+- **Motor de físicas:** pymunk, con un modelo de rueda propio que permite patinar.
 
 ## 9. Preguntas abiertas
 
-1. **Choques entre robots:** ¿se bloquean como propone la sección 3.2, o se permite empujar a otro robot?
-2. **Bordes del mapa:** se propone tratarlos como paredes. ¿O un robot que se sale del mapa debe volver a colocarse?
+Ninguna por ahora. Los valores de masa, rozamiento, restitución y adherencia de los YAML son una primera estimación; se ajustarán en la fase 6 viendo cómo se comportan los robots.

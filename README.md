@@ -24,7 +24,7 @@ Solo hace cálculo. **No habla HTTP ni WebSocket y no accede a la base de datos.
 
 | Área | Qué hace |
 |------|----------|
-| **Física** | Bucle a paso fijo (60 Hz por defecto) con un **modelo cinemático de tracción diferencial** sin deslizamiento, suficiente para los robots de prácticas (20 cm/s). Colisiones entre robots con un círculo de radio `radio_colision`. |
+| **Física** | Bucle a paso fijo (60 Hz por defecto) con un **modelo dinámico**: cada robot tiene masa e inercia, y sus ruedas lo empujan con una fuerza limitada por su adherencia. Los robots **se empujan** entre sí, y al llegar a los bordes del mapa, que son **paredes**, **rebotan**, se **arrastran** o **giran** según el ángulo, la velocidad y el rozamiento. |
 | **Motores** | Aplica cada consigna en el siguiente paso de física. La velocidad real de cada rueda se acerca a la pedida respetando `aceleracion_max` y `deceleracion_max` (inercia). Con los motores desactivados, la rueda frena con `deceleracion_reposo`. |
 | **Sensores** | Muestrea cada sensor a su frecuencia (10 Hz los infrarrojos), comprobando si su punto de medida cae sobre la línea del circuito (25 mm de ancho). De momento son **digitales** (`0` o `1`); más adelante habrá un sensor que promedia varias lecturas. Cada muestra lleva una marca de tiempo en milisegundos. |
 | **Circuito** | Usa el circuito (óvalo, ocho…) que le indica `CIRCUITO`, cuya definición recibe de la pasarela. |
