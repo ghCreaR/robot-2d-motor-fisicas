@@ -2,7 +2,7 @@
 
 Este plan detalla cómo construir el motor de simulación descrito en el [README del repositorio común](https://github.com/ojgarciab/carrera-robots-autonomos). Todavía no hay código: es una propuesta para revisar antes de empezar.
 
-Los mensajes del bus están definidos en [`contratos/bus.md`](https://github.com/ojgarciab/carrera-robots-autonomos/blob/main/contratos/bus.md) del repositorio común, y los circuitos en [`circuitos/`](https://github.com/ojgarciab/carrera-robots-autonomos/tree/main/circuitos). Este plan usa esos mismos nombres.
+Los mensajes del bus están definidos en [`contratos/bus.md`](https://github.com/ojgarciab/carrera-robots-autonomos/blob/master/contratos/bus.md) del repositorio común, y los circuitos en [`circuitos/`](https://github.com/ojgarciab/carrera-robots-autonomos/tree/master/circuitos). Este plan usa esos mismos nombres.
 
 ## 1. Decisiones técnicas propuestas
 
@@ -69,7 +69,7 @@ Para cada robot, en cada paso `dt = 1 / PASO_FISICA_HZ`:
 
 ### 3.4. Circuitos
 
-Los circuitos se definen en YAML en el repositorio común, con el formato de [`circuitos/README.md`](https://github.com/ojgarciab/carrera-robots-autonomos/blob/main/circuitos/README.md): mapa en metros, ancho de línea y trazados formados por rectas y arcos. Ya están `ovalo.yaml` y `ocho.yaml`. El motor no los lleva copiados: recibe el suyo de la pasarela en la respuesta a `configuracion`.
+Los circuitos se definen en YAML en el repositorio común, con el formato de [`circuitos/README.md`](https://github.com/ojgarciab/carrera-robots-autonomos/blob/master/circuitos/README.md): mapa en metros, ancho de línea y trazados formados por rectas y arcos. Ya están `ovalo.yaml` y `ocho.yaml`. El motor no los lleva copiados: recibe el suyo de la pasarela en la respuesta a `configuracion`.
 
 - Con rectas y arcos la distancia a la línea es exacta: distancia a un segmento, o `|distancia al centro − radio|` si el ángulo cae dentro del arco y, si no, distancia al extremo más cercano.
 - Para no recorrer todos los tramos en cada lectura, se puede usar una rejilla de celdas con los tramos que pasan por cada una. Con circuitos de 4 tramos no hace falta en la primera versión.

@@ -41,7 +41,7 @@ Solo hace cálculo. **No habla HTTP ni WebSocket y no accede a la base de datos.
 
 ## Configuración
 
-Variables de entorno (ver el [`compose.yaml`](https://github.com/ojgarciab/carrera-robots-autonomos/blob/main/compose.yaml) del repositorio común):
+Variables de entorno (ver el [`compose.yaml`](https://github.com/ojgarciab/carrera-robots-autonomos/blob/master/compose.yaml) del repositorio común):
 
 | Variable | Por defecto | Descripción |
 |----------|-------------|-------------|
@@ -60,9 +60,9 @@ No expone puertos: solo se conecta al bus.
 ## Documentación relacionada
 
 - [Arquitectura del servidor](https://github.com/ojgarciab/carrera-robots-autonomos#arquitectura-del-servidor) y [mensajes entre componentes](https://github.com/ojgarciab/carrera-robots-autonomos#mensajes-entre-componentes)
-- [Modelos de robot](https://github.com/ojgarciab/carrera-robots-autonomos#modelos-de-robot) y [formato de los YAML](https://github.com/ojgarciab/carrera-robots-autonomos/blob/main/robots/README.md)
+- [Modelos de robot](https://github.com/ojgarciab/carrera-robots-autonomos#modelos-de-robot) y [formato de los YAML](https://github.com/ojgarciab/carrera-robots-autonomos/blob/master/robots/README.md)
 - [Ciclo de vida del robot en el mundo](https://github.com/ojgarciab/carrera-robots-autonomos#ciclo-de-vida-del-robot-en-el-mundo)
-- [Contrato de los mensajes del bus](https://github.com/ojgarciab/carrera-robots-autonomos/blob/main/contratos/bus.md) y [formato de los circuitos](https://github.com/ojgarciab/carrera-robots-autonomos/blob/main/circuitos/README.md)
+- [Contrato de los mensajes del bus](https://github.com/ojgarciab/carrera-robots-autonomos/blob/master/contratos/bus.md) y [formato de los circuitos](https://github.com/ojgarciab/carrera-robots-autonomos/blob/master/circuitos/README.md)
 - [Plan de implementación](Plan.md)
 
 ## Licencia
